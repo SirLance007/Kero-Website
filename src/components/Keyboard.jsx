@@ -23,29 +23,30 @@ export function Keyboard(props) {
   
   const scroll = useScroll();
 
-  // Audio Context for synthetic mechanical clicks
-  const audioCtxRef = useRef(null);
-  const lastClickTimeRef = useRef(0);
+  // Audio playback for authentic typing sound
+  const audioRef = useRef(null);
 
   useEffect(() => {
-    // Only init inside an event listener to comply with Browser Autoplay rules
-    const initAudio = () => {
-      if (!audioCtxRef.current) {
-        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    const audio = new Audio('/typing.ogg');
+    audio.loop = true;
+    audio.volume = 0; // Starts silent
+    audioRef.current = audio;
+
+    const playAudio = () => {
+      if (audio.paused) {
+        audio.play().catch(e => console.log('Audio play failed, user interaction needed first'));
       }
-      if (audioCtxRef.current.state === 'suspended') {
-        audioCtxRef.current.resume();
-      }
+      window.removeEventListener('pointerdown', playAudio);
+      window.removeEventListener('keydown', playAudio);
     };
-    
-    window.addEventListener('scroll', initAudio, { passive: true });
-    window.addEventListener('pointerdown', initAudio);
-    window.addEventListener('keydown', initAudio);
-    
+
+    window.addEventListener('pointerdown', playAudio);
+    window.addEventListener('keydown', playAudio);
+
     return () => {
-      window.removeEventListener('scroll', initAudio);
-      window.removeEventListener('pointerdown', initAudio);
-      window.removeEventListener('keydown', initAudio);
+      window.removeEventListener('pointerdown', playAudio);
+      window.removeEventListener('keydown', playAudio);
+      audio.pause();
     };
   }, []);
   
@@ -210,29 +211,12 @@ export function Keyboard(props) {
          }
       }
       
-      // Play synthetic mechanical clicks during the wave animation typing effect
-      if (waveIntensity > 0.05 && audioCtxRef.current && audioCtxRef.current.state === 'running') {
-          const now = state.clock.elapsedTime;
-          // Trigger clicks at randomized mechanical-speed intervals
-          if (now - lastClickTimeRef.current > (0.04 + Math.random() * 0.06)) {
-              lastClickTimeRef.current = now;
-              
-              const osc = audioCtxRef.current.createOscillator();
-              const gain = audioCtxRef.current.createGain();
-              
-              // Thocky/clicky mechanical sound parameters
-              osc.type = 'sine'; // 'sine' provides a solid 'thud/thock' while 'square' is a sharper 'click'
-              osc.frequency.setValueAtTime(600 + Math.random() * 200, audioCtxRef.current.currentTime);
-              osc.frequency.exponentialRampToValueAtTime(50, audioCtxRef.current.currentTime + 0.03);
-              
-              gain.gain.setValueAtTime(0.08 * waveIntensity, audioCtxRef.current.currentTime);
-              gain.gain.exponentialRampToValueAtTime(0.001, audioCtxRef.current.currentTime + 0.03);
-              
-              osc.connect(gain);
-              gain.connect(audioCtxRef.current.destination);
-              
-              osc.start();
-              osc.stop(audioCtxRef.current.currentTime + 0.03);
+      // Adjust authentic typing sound volume based on wave intensity
+      if (audioRef.current && !audioRef.current.paused) {
+          if (waveIntensity > 0.05) {
+              audioRef.current.volume = Math.min(1, waveIntensity); // Scale volume smoothly up to 100%
+          } else {
+              audioRef.current.volume = 0; // Completely silent
           }
       }
     }
