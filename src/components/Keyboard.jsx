@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox, Box, useScroll, Cylinder } from '@react-three/drei';
 import * as THREE from 'three';
@@ -22,6 +22,32 @@ export function Keyboard(props) {
   const caseRef = useRef();
   
   const scroll = useScroll();
+
+  // Audio Context for synthetic mechanical clicks
+  const audioCtxRef = useRef(null);
+  const lastClickTimeRef = useRef(0);
+
+  useEffect(() => {
+    // Only init inside an event listener to comply with Browser Autoplay rules
+    const initAudio = () => {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume();
+      }
+    };
+    
+    window.addEventListener('scroll', initAudio, { passive: true });
+    window.addEventListener('pointerdown', initAudio);
+    window.addEventListener('keydown', initAudio);
+    
+    return () => {
+      window.removeEventListener('scroll', initAudio);
+      window.removeEventListener('pointerdown', initAudio);
+      window.removeEventListener('keydown', initAudio);
+    };
+  }, []);
   
   const keys = useMemo(() => {
     const k = [];
@@ -182,6 +208,32 @@ export function Keyboard(props) {
                 }
             }
          }
+      }
+      
+      // Play synthetic mechanical clicks during the wave animation typing effect
+      if (waveIntensity > 0.05 && audioCtxRef.current && audioCtxRef.current.state === 'running') {
+          const now = state.clock.elapsedTime;
+          // Trigger clicks at randomized mechanical-speed intervals
+          if (now - lastClickTimeRef.current > (0.04 + Math.random() * 0.06)) {
+              lastClickTimeRef.current = now;
+              
+              const osc = audioCtxRef.current.createOscillator();
+              const gain = audioCtxRef.current.createGain();
+              
+              // Thocky/clicky mechanical sound parameters
+              osc.type = 'sine'; // 'sine' provides a solid 'thud/thock' while 'square' is a sharper 'click'
+              osc.frequency.setValueAtTime(600 + Math.random() * 200, audioCtxRef.current.currentTime);
+              osc.frequency.exponentialRampToValueAtTime(50, audioCtxRef.current.currentTime + 0.03);
+              
+              gain.gain.setValueAtTime(0.08 * waveIntensity, audioCtxRef.current.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.001, audioCtxRef.current.currentTime + 0.03);
+              
+              osc.connect(gain);
+              gain.connect(audioCtxRef.current.destination);
+              
+              osc.start();
+              osc.stop(audioCtxRef.current.currentTime + 0.03);
+          }
       }
     }
 
